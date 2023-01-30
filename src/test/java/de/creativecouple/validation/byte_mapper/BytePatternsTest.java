@@ -7,6 +7,7 @@ import static de.creativecouple.validation.byte_mapper.BytePatternEventType.GROU
 import static de.creativecouple.validation.byte_mapper.BytePatternEventType.GROUP_END;
 import static de.creativecouple.validation.byte_mapper.BytePatternEventType.PLACEHOLDER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class BytePatternsTest {
 
@@ -31,7 +32,7 @@ public class BytePatternsTest {
         String hexString = """
                 00 11 22 33 // signature
                 44 55 66 77
-                  88 99 aa bb
+                  88 99 aa bb // white space on purpose
                 cc""";
         assertThat(BytePatterns.parse(hexString)).containsExactly(
                 event(CONSTANT_BYTES, true, 0x7766554433221100L).withSize(new LinearSizeValue(8, 0, null))
@@ -48,6 +49,26 @@ public class BytePatternsTest {
         assertThat(BytePatterns.parse(hexString))
                 .containsExactly(event(PLACEHOLDER, null, null).withSize(new LinearSizeValue(3, 0, null))
                         .withSource(new BytePatternSource(hexString, 1, 0, "** ** **")));
+    }
+
+    @Test
+    void parseMultipleVariablePlaceholders() {
+        String hexString = """
+                **{?} **{?} // must throw an error
+                """;
+        assertThatThrownBy(() -> BytePatterns.parse(hexString))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("there is already a variable-sized parameter");
+    }
+
+    @Test
+    void parseMultipleSameParameters() {
+        String hexString = """
+                ** :test ** :test // must throw an error
+                """;
+        assertThatThrownBy(() -> BytePatterns.parse(hexString))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("parameter 'test' occurred twice");
     }
 
     @Test
@@ -126,6 +147,38 @@ public class BytePatternsTest {
                         .withSource(new BytePatternSource(hexString, 3, 11, "]{$size}")),
                 event(CONSTANT_BYTES, true, (long) 0xccbbaa).withSize(new LinearSizeValue(3, 0, null))
                         .withSource(new BytePatternSource(hexString, 4, 0, "aa bb cc")));
+    }
+
+    @Test
+    void parseNestedGroups() {
+        String hexString = """
+                ** ** :$test
+                [** ** [**{?}]{$test}] // must throw an error
+                """;
+        assertThatThrownBy(() -> BytePatterns.parse(hexString))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("only one level of group expression supported");
+    }
+
+    @Test
+    void parseUnknownGroupSize() {
+        String hexString = """
+                [** ** **{?}]{$test} // must throw an error
+                ** ** :$test
+                """;
+        assertThatThrownBy(() -> BytePatterns.parse(hexString))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("group size depending on unknown size variable '$test'");
+    }
+
+    @Test
+    void parseIllegalGroupEnd() {
+        String hexString = """
+                ** ** **{?}]{16} // must throw an error
+                """;
+        assertThatThrownBy(() -> BytePatterns.parse(hexString))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("group end expression misses group start");
     }
 
     private BytePatternEvent event(BytePatternEventType type, Boolean littleEndian, Object value) {

@@ -18,11 +18,11 @@ public final class ByteArrays {
             result.append(Integer.toHexString(array[i] & 0xFF | 0x100).substring(1));
         }
         if (array.length == 6) {
-            result.append(Integer.toHexString(array[5] & 0xFF | 0x100).substring(1));
+            result.append(' ').append(Integer.toHexString(array[5] & 0xFF | 0x100).substring(1));
         } else if (array.length > 6) {
-            result.append(" ..{").append(array.length).append('}');
+            result.append(" ..");
         }
-        result.append(']');
+        result.append(']').append('{').append(array.length).append('}');
         return result.toString();
     }
 
